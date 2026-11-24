@@ -11,11 +11,12 @@ class ExchangeEnvelope:
     artifact_id: str
     source: SourceBinding
     body: dict
+    version: int = 1
 
 
 def pack_exchange(envelope: ExchangeEnvelope) -> str:
     return json.dumps({
-        'version': 1,
+        'version': envelope.version,
         'artifact_id': envelope.artifact_id,
         'source': envelope.source.as_dict(),
         'body': envelope.body,
@@ -41,8 +42,9 @@ def unpack_exchange(exchange: str) -> ExchangeEnvelope:
         raise ValueError('invalid exchange JSON') from exc
     if not isinstance(data, dict) or data.keys() != {'version', 'artifact_id', 'source', 'body'}:
         raise ValueError('invalid exchange fields')
-    if type(data['version']) is not int or data['version'] != 1:
+    if type(data['version']) is not int or data['version'] not in (1, 2):
         raise ValueError('unsupported exchange version')
+    version = data['version']
     artifact_id = data['artifact_id']
     if (not isinstance(artifact_id, str) or len(artifact_id) != 64
             or any(char not in '0123456789abcdef' for char in artifact_id)):
@@ -53,4 +55,4 @@ def unpack_exchange(exchange: str) -> ExchangeEnvelope:
     source_binding = SourceBinding(**{field: require_name(value, field) for field, value in source.items()})
     if not isinstance(data['body'], dict):
         raise ValueError('exchange body must be an object')
-    return ExchangeEnvelope(artifact_id, source_binding, data['body'])
+    return ExchangeEnvelope(artifact_id, source_binding, data['body'], version)

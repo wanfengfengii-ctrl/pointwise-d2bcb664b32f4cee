@@ -24,3 +24,14 @@ def artifact_identity(source: SourceBinding, body: dict) -> str:
     identity_data = {'version': 1, 'source': source.as_dict(), 'body': canonical_body}
     payload = json.dumps(identity_data, sort_keys=True, separators=(',', ':'), ensure_ascii=True)
     return hashlib.sha256(payload.encode('ascii')).hexdigest()
+
+
+def turn_artifact_identity(source: SourceBinding, body: dict) -> str:
+    """Hash the V2 source, bands, and phase window.
+
+    The body is already encoded canonically: bands sorted by name, points
+    sorted by numeric coordinates, and arc start/end order preserved.
+    """
+    identity_data = {'version': 2, 'source': source.as_dict(), 'body': body}
+    payload = json.dumps(identity_data, sort_keys=True, separators=(',', ':'), ensure_ascii=True)
+    return hashlib.sha256(payload.encode('ascii')).hexdigest()

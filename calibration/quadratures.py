@@ -23,6 +23,13 @@ class RationalComplex:
             self.real * other.imag + self.imag * other.real,
         )
 
+    def __neg__(self) -> 'RationalComplex':
+        return RationalComplex(-self.real, -self.imag)
+
+    def __truediv__(self, divisor: Fraction | int) -> 'RationalComplex':
+        factor = parse_rational(divisor)
+        return RationalComplex(self.real / factor, self.imag / factor)
+
     def conjugate(self) -> 'RationalComplex':
         return RationalComplex(self.real, -self.imag)
 

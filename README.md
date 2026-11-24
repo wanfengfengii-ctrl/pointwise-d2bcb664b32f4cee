@@ -8,10 +8,10 @@
 
 ```text
 python3 -B check_project.py
-python3 -B -m examples.shift
+python3 -B -m examples.turn_case
 ```
 
-第一条命令使用工作台运行平台提供的入口。也可直接使用 `python3 -B -m unittest discover -s tests -t . -p 'test_*.py'`。演示输入位于 `examples/shift.py`，在独立临时库内完成录入、出件、实收、停源签报、勘误、重开和复领。库在演示结束时删除。
+第一条命令使用工作台运行平台提供的入口。也可直接使用 `python3 -B -m unittest discover -s tests -t . -p 'test_*.py'`。V1 演示位于 `examples/shift.py`，V2 转相演示位于 `examples/turn_case.py`，均在独立临时库内完成录入、出件、实收、关站签报、勘误、重开和复领。库在演示结束时删除。
 
 ## 公开调用
 
@@ -23,9 +23,11 @@ python3 -B -m examples.shift
 | 主管 | `measurements.get_revision(station_db, revision_id)`、`measurements.read_revision_lineage(station_db, revision_id)` | 读取原测以及从本修订向前的勘误链。 |
 | 主管 | `calibration.freeze(station_db, revision_id, reference=None)` | `FixedAnalysis` 含 `analysis_id`、来源、站内参考记录以及 `inspection` 的响应、资格和能量。`calibration.get_fixed_analysis` 按号领取。 |
 | 主管 | `phase_evidence.issue(station_db, analysis_id)` | `IssuedArtifact` 含 `artifact_id`、来源和 `exchange` 交运文本。`phase_evidence.get_issued_artifact` 按原件号复取。 |
-| 夜班 | `receiving.accept(center_db, exchange, declared_artifact_id)` | `Receipt` 含 `receipt_id` 和 `artifact_id`。`receiving.lookup_received` 按号读取实际留存的原件、来源、证据及回执。 |
+| 主管 | `phase_evidence.issue_turn(station_db, analysis_id, normals)` | 针对本站未锚定固定分析发行 V2 转相件，`normals` 为一或两条单位法向。现场校验留站，同来源同相位域重复发行复领原件。 |
+| 夜班 | `receiving.accept(center_db, exchange, declared_artifact_id)` | `Receipt` 含 `receipt_id` 和 `artifact_id`，同时验收 V1 与 V2。`receiving.lookup_received` 按号读取实际留存的原件、来源、证据及回执。 |
 | 夜班 | `receiving.collect_pair(center_db, (left_id, right_id))` | 依指定顺序领取来自不同台架的两个实收件，适用于关站后的资料核对。 |
 | 质控员 | `review.sign(center_db, (left_id, right_id), weights)` | `SignedReport` 含 `report_id`、规范化的原请求、输入顺序的父件、`outcome` 和成功回执。`weights` 是频带名到有理数的映射。 |
+| 质控员 | `review.sign_turn(center_db, (left_id, right_id), weights, energy_limit)` | 关站后办理 V2 左件与异台已锚定 V1 右件的转相签报，返回可直接 JSON 序列化的字典，安全方向以二次根式坐标精确给出。`review.get_turn_report` 按号复读快照。 |
 | 班组 | `review.get_report(center_db, report_id)` | 读取原签存快照。读取路径直接使用报告账及其成功回执。 |
 
 台架、测次和带名使用非空文本，按原拼写精确匹配。正交分量和权重接受整数、`Fraction` 及可由 `Fraction` 解析的有理数字串。布尔、浮点和非法分数拒绝。原读数同单位 U。`calibration.ReferenceRecord(revision_id, (实部, 虚部))` 表示已由上游核准的公共参考校正，因子的模平方必须精确为 1。`ReferenceRecord(revision_id, None)` 表示存在候选记录但缺有效相位。直接传入 `None` 表示缺候选记录。校正后单站能量为各带模平方之和。
@@ -37,6 +39,16 @@ python3 -B -m examples.shift
 复检按名称对齐两件，各请求带均须存在，包括权重为零的带。权重无量纲，非负且至少一带为正。已锚定件使用公共参考，未锚定件的全部带共用一次未知单位相位转动，两件缺参考时转动可各自独立。中心把同名带响应相加，计算模平方后加权。整项在所有相容相位下恒定时，`outcome.status` 为 `exact`，`outcome.energy` 为 `Fraction`，包括确定的零。整项随相位变化时状态为 `undetermined`，能量为 `None`。单位为 U²。
 
 输入错误由 `ValueError` 表达。单号读取找不到记录时返回 `None`，无起始修订时勘误链为空。SQLite 签存异常由原数据库异常报告，报告与成功回执一并回滚。重新打开数据库后，旧报告沿原号指向原有签存快照。
+
+## V2 安全转相
+
+`phase_evidence.issue_turn` 只接受本站确切的未锚定固定分析。每条校验法向是模平方精确为 1 的有理复数，实际相位 `p` 须同时满足 `dot(p, normal) >= 0`。一或两条法向的半周交集规范化为两种相位域：逆时针闭弧（弧长不超过半周）或一对互为反向的孤点。V2 交运外层沿用 `version`、`artifact_id`、`source`、`body`，`version` 为 2；正文只含按名排序的 `bands` 和 `phase_window`。件号沿用 V1 的 SHA256 ASCII JSON 口径，但版本键取 2，因此同一来源的 V1、V2 件号互不冲突。原测与现场法向记录保存在站库的 `turn_checks` 账。
+
+夜班 `receiving.accept` 按版本分别核验：V2 重算件号并校验相位域结构，重复投递复用首次实收号并保全首次合法交运文本；用原件号改投另一相位域或损坏正文一律拒收且不留账。
+
+`review.sign_turn` 在两站关库后办理。左件必须是异台 V2、右件必须是已锚定 V1，请求带（含零权重带）两边都须存在，`energy_limit` 为非负有理数。对每个候选旋钮方向 `t`，同一实际相位 `p` 与同一 `t` 作用于全部频带：以 `t*p` 乘左侧响应后与右侧锚定响应相加，取模平方并按带权合计；只有相位域内每个 `p` 的能量都不超过上限，`t` 才可签发。
+
+能量化简为 `B0 + 2 Re(t p C)`，其中 `B0`、`C = Σ w a conj(b)` 都是有理常量。每条相位约束是单位圆上的半平面，边界方向精确写成 `a + b√d`（`d` 为非负整数，`a`、`b` 为有理文本），全程不使用浮点。返回的 `directions` 区分整圆 `full`、空集 `empty` 与 `parts`；`parts` 用互不重叠相接的最大闭弧和弧外孤点表示。报告与成功回执同事务提交，写入失败整体回滚，重开中心库后可按 `report_id` 经 `get_turn_report` 领取原请求、双件出处、完整方向集和回执。V1 的 `sign`、件字节、报告账与原回归保持不变。
 
 ## 样例核对
 

@@ -7,6 +7,9 @@ from .issue import IssuedArtifact as IssuedArtifact
 from .issue import get_issued_artifact as get_issued_artifact
 from .issue import initialize_issuance_store
 from .issue import issue as issue
+from .turn_issue import get_turn_checks as get_turn_checks
+from .turn_issue import initialize_turn_store
+from .turn_issue import issue_turn as issue_turn
 
 
 def initialize_station(conn: sqlite3.Connection) -> None:
@@ -16,3 +19,4 @@ def initialize_station(conn: sqlite3.Connection) -> None:
     initialize_revision_store(conn)
     initialize_analysis_store(conn)
     initialize_issuance_store(conn)
+    initialize_turn_store(conn)

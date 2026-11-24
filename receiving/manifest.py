@@ -4,23 +4,32 @@ from dataclasses import dataclass
 from phase_evidence.export import ExchangeEnvelope, unpack_exchange
 from phase_evidence.identity import artifact_identity
 from phase_evidence.response import PhaseEvidence, decode_evidence, encode_evidence
+from phase_evidence.turn_issue import verify_turn_delivery
+from phase_evidence.turn_response import TurnEvidence
 
 
 @dataclass(frozen=True)
 class VerifiedDelivery:
     exchange: str
     envelope: ExchangeEnvelope
-    evidence: PhaseEvidence
+    evidence: PhaseEvidence | TurnEvidence
+
+    @property
+    def version(self) -> int:
+        return self.envelope.version
 
 
 def verify_delivery(exchange: str, declared_artifact_id: str) -> VerifiedDelivery:
     envelope = unpack_exchange(exchange)
     if envelope.artifact_id != declared_artifact_id:
         raise ValueError('declared identity does not match exchange identity')
-    evidence = decode_evidence(envelope.body)
-    recomputed = artifact_identity(envelope.source, encode_evidence(evidence))
-    if recomputed != envelope.artifact_id:
-        raise ValueError('exchange identity does not match its source and evidence')
+    if envelope.version == 1:
+        evidence = decode_evidence(envelope.body)
+        recomputed = artifact_identity(envelope.source, encode_evidence(evidence))
+        if recomputed != envelope.artifact_id:
+            raise ValueError('exchange identity does not match its source and evidence')
+    else:
+        evidence = verify_turn_delivery(envelope)
     return VerifiedDelivery(exchange, envelope, evidence)
 
 
